@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Token Gösterici</title>
+  <style>
+    body {
+      margin: 0;
+      background: #1a1a1a;
+      color: #f0f0f0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .token-display {
+      background: #252525;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-wrap: break-word;
+      margin: 10px 0;
+      font-family: monospace;
+      font-size: 14px;
+    }
+    .loading {
+      padding: 20px;
+      text-align: center;
+    }
+    .error {
+      color: #e74c3c;
+      padding: 20px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>ATV Kanalı Token Bilgisi</h2>
+    <div id="tokenResult">
+      <div class="loading">Token bilgisi alınıyor...</div>
+    </div>
+  </div>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // --- API ---
+    const API_URL = "https://core-api.kablowebtv.com/api/channels";
+    const HEADERS = {
+      "User-Agent": "Mozilla/5.0",
+      "Referer": "https://tvheryerde.com",
+      "Origin": "https://tvheryerde.com",
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbnYiOiJMSVZFIiwiaXBiIjoiMCIsImNnZCI6IjA5M2Q3MjBhLTUwMmMtNDFlZC1hODBmLTJiODE2OTg0ZmI5NSIsImNzaCI6IlRSS1NUIiwiZGN0IjoiRTFDNjQiLCJkaSI6Ijg5MTlmNjYwLTBhZGUtNGYwMS1hMTVlLTc2MDZjNjI4ZTc5MyIsInNnZCI6IjM5MTY0ZjIwLTZlZjUtNDRlZS04ZjAyLWEzODRjOTg1ZTY5MyIsInNwZ2QiOiI5ZjJlYWE1NC01NDM2LTQ0ZTgtYTkyNy00MzQ2NjlkMTU1MWEiLCJpY2giOiIwIiwiaWRtIjoiMCIsImlhIjoiOjpmZmZmOjEwLjAuMC41IiwiYXB2IjoiMS4wLjAiLCJhYm4iOiIxMDAwIiwibmJmIjoxNzQzNDY1MzY5LCJleHAiOjE3NDM0NjU0MjksImlhdCI6MTc0MzQ2NTM2OX0.YWdVfOL5hEZTrd4f4qkmPCPmUUlaiG7I2REW5H0p6Gw"
+    };
+
+    async function fetchToken() {
+      try {
+        const res = await fetch(API_URL, { headers: HEADERS, method: 'GET' });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        
+        const data = await res.json();
+        if (!data.IsSucceeded || !data.Data || !data.Data.AllChannels)
+          throw new Error("Geçersiz API yanıtı");
+
+        // 'atv' kanalını bul
+        const atvChannel = data.Data.AllChannels.find(ch => 
+          ch && ch.StreamData && ch.StreamData.HlsStreamUrl && 
+          ch.StreamData.HlsStreamUrl.includes('atv_stream')
+        );
+        
+        if (atvChannel && atvChannel.StreamData.HlsStreamUrl) {
+          const url = atvChannel.StreamData.HlsStreamUrl;
+          const prefix = "https://ottcdn.kablowebtv.net/live_turksat_sub3/atv_stream/index.m3u8?wmsAuthSign=";
+          
+          if (url.startsWith(prefix)) {
+            const token = url.substring(prefix.length);
+            document.getElementById('tokenResult').innerHTML = `
+              <div class="token-display">${token}</div>
+            `;
+          } else {
+            throw new Error("ATV URL'si beklenen formatta değil");
+          }
+        } else {
+          throw new Error("ATV kanalı veya stream URL bulunamadı");
+        }
+      } catch (e) {
+        document.getElementById('tokenResult').innerHTML = `<div class="error">Hata: ${e.message}</div>`;
+      }
+    }
+
+    fetchToken();
+  });
+  </script>
+</body>
+</html>
