@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATV Token API Endpoint</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            margin-top: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #fdbb2d;
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        .token-container {
+            background: #2c3e50;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .token {
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+            white-space: pre-wrap;
+            color: #fff;
+        }
+        .btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .btn-copy {
+            background: #27ae60;
+        }
+        .btn-copy:hover {
+            background: #219653;
+        }
+        .btn-refresh {
+            background: #e67e22;
+        }
+        .btn-refresh:hover {
+            background: #d35400;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background: #27ae60;
+            display: block;
+        }
+        .error {
+            background: #e74c3c;
+            display: block;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+        }
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        .endpoint-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .api-response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #34495e;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ATV Token API Endpoint</h1>
+        
+        <div id="tokenResult">
+            <div class="loading">Token bilgisi alınıyor...</div>
+        </div>
+        
+        <div class="instructions">
+            <h3>Kullanım Kılavuzu</h3>
+            <p>Bu sayfa, API'den alınan token'i ham metin olarak döndürür. Aşağıdaki endpoint'e GET isteği yaparak token'i alabilirsiniz:</p>
+            
+            <div class="endpoint-info">
+                <strong>Endpoint:</strong> https://&lt;your-domain&gt;/token.html<br>
+                <strong>Method:</strong> GET<br>
+                <strong>Response:</strong> Ham token metni (text/plain)
+            </div>
+            
+            <p>Örnek kullanım (JavaScript):</p>
+            <div class="endpoint-info">
+                fetch('https://&lt;your-domain&gt;/token.html')<br>
+                .then(response => response.text())<br>
+                .then(token => {<br>
+                &nbsp;&nbsp;// Token'i kullan<br>
+                &nbsp;&nbsp;console.log(token);<br>
+                });
+            </div>
+        </div>
+        
+        <div id="apiResponse" class="api-response"></div>
+    </div>
+
+    <div class="footer">
+        <p>Token API: https://core-api.kablowebtv.com/api/channels</p>
+    </div>
+
+    <script>
+        // URL parametrelerini kontrol et
+        const urlParams = new URLSearchParams(window.location.search);
+        const apiRequest = urlParams.get('api');
+        
+        // API isteği için özel fonksiyon
+        async function handleTokenRequest() {
+            try {
+                const token = await fetchTokenFromAPI();
+                
+                // Eğer API isteği yapıldıysa, sadece token'i döndür
+                if (apiRequest) {
+                    document.body.innerHTML = token;
+                    return;
+                }
+                
+                // Normal kullanıcı arayüzü için token'i göster
+                displayToken(token);
+            } catch (error) {
+                if (apiRequest) {
+                    document.body.innerHTML = `Hata: ${error.message}`;
+                } else {
+                    displayError(error.message);
+                }
+            }
+        }
+
+        // Token'i API'den al
+        async function fetchTokenFromAPI() {
+            const API_URL = "https://core-api.kablowebtv.com/api/channels";
+            const HEADERS = {
+                "User-Agent": "Mozilla/5.0",
+                "Referer": "https://tvheryerde.com",
+                "Origin": "https://tvheryerde.com",
+                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbnYiOiJMSVZFIiwiaXBiIjoiMCIsImNnZCI6IjA5M2Q3MjBhLTUwMmMtNDFlZC1hODBmLTJiODE2OTg0ZmI5NSIsImNzaGI6IlRSS1NUIiwiZGN0IjoiRTFDNjQiLCJkaSI6Ijg5MTlmNjYwLTBhZGUtNGYwMS1hMTVlLTc2MDZjNjI4ZTc5MyIsInNnZCI6IjM5MTY0ZjIwLTZlZjUtNDRlZS04ZjAyLWEzODRjOTg1ZTY5MyIsInNwZ2QiOiI5ZjJlYWE1NC01NDM2LTQ0ZTgtYTkyNy00MzQ2NjlkMTU1MWEiLCJpY2giOiIwIiwiaWRtIjoiMCIsImlhIjoiOjpmZmZmOjEwLjAuMC41IiwiYXB2IjoiMS4wLjAiLCJhYm4iOiIxMDAwIiwibmJmIjoxNzQzNDY1MzY5LCJleHAiOjE3NDM0NjU0MjksImlhdCI6MTc0MzQ2NTM2OX0.YWdVfOL5hEZTrd4f4qkmPCPmUUlaiG7I2REW5H0p6Gw"
+            };
+
+            const res = await fetch(API_URL, { headers: HEADERS, method: 'GET' });
+            if (!res.ok) throw new Error(`API hatası: ${res.status}`);
+            
+            const data = await res.json();
+            if (!data.IsSucceeded || !data.Data || !data.Data.AllChannels)
+                throw new Error("Geçersiz API yanıtı");
+
+            // 'atv' kanalını bul
+            const atvChannel = data.Data.AllChannels.find(ch => 
+                ch && ch.StreamData && ch.StreamData.HlsStreamUrl && 
+                ch.StreamData.HlsStreamUrl.includes('atv_stream')
+            );
+            
+            if (atvChannel && atvChannel.StreamData.HlsStreamUrl) {
+                const url = atvChannel.StreamData.HlsStreamUrl;
+                const prefix = "https://ottcdn.kablowebtv.net/live_turksat_sub3/atv_stream/index.m3u8?wmsAuthSign=";
+                
+                if (url.startsWith(prefix)) {
+                    return url.substring(prefix.length);
+                } else {
+                    throw new Error("ATV URL'si beklenen formatta değil");
+                }
+            } else {
+                throw new Error("ATV kanalı veya stream URL bulunamadı");
+            }
+        }
+
+        // Token'i kullanıcı arayüzünde göster
+        function displayToken(token) {
+            document.getElementById('tokenResult').innerHTML = `
+                <div class="token-container">
+                    <div class="token">${token}</div>
+                </div>
+                <div style="text-align: center;">
+                    <button class="btn btn-copy" onclick="copyToken()">Tokeni Kopyala</button>
+                    <button class="btn btn-refresh" onclick="refreshToken()">Yenile</button>
+                </div>
+                <div id="statusMessage"></div>
+            `;
+            
+            // API yanıtını göster
+            document.getElementById('apiResponse').style.display = 'block';
+            document.getElementById('apiResponse').textContent = `API Yanıtı (ham metin):\n${token}`;
+        }
+
+        // Hata mesajını göster
+        function displayError(message) {
+            document.getElementById('tokenResult').innerHTML = `
+                <div class="status error">Hata: ${message}</div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="btn btn-refresh" onclick="refreshToken()">Tekrar Dene</button>
+                </div>
+            `;
+        }
+
+        // Tokeni panoya kopyalama fonksiyonu
+        window.copyToken = function() {
+            const tokenElement = document.querySelector('.token');
+            const tokenText = tokenElement.textContent;
+            
+            navigator.clipboard.writeText(tokenText)
+                .then(() => {
+                    showStatus('Token panoya kopyalandı!', 'success');
+                })
+                .catch(err => {
+                    showStatus('Kopyalama hatası: ' + err, 'error');
+                });
+        };
+
+        // Tokeni yenileme fonksiyonu
+        window.refreshToken = function() {
+            document.getElementById('tokenResult').innerHTML = '<div class="loading">Token bilgisi alınıyor...</div>';
+            handleTokenRequest();
+        };
+
+        // Durum mesajı gösterme fonksiyonu
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            
+            // 3 saniye sonra mesajı gizle
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        // Sayfa yüklendiğinde token'i al
+        handleTokenRequest();
+    </script>
+</body>
+</html>
