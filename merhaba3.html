@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Güncelleyici</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .token-display {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            word-break: break-all;
+            font-family: monospace;
+            border: 1px solid #ddd;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border: 1px solid transparent;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+        .loading {
+            color: #007acc;
+        }
+    </style>
+</head>
+<body>
+    <h1>Token Güncelleyici</h1>
+    <div id="status" class="status loading">Token alınıyor ve dosyaya yazılıyor...</div>
+    <div id="tokenResult" class="token-display" style="display: none;">
+        <strong>Güncel Token:</strong>
+        <div id="tokenValue"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const statusDiv = document.getElementById('status');
+            const tokenResult = document.getElementById('tokenResult');
+            const tokenValue = document.getElementById('tokenValue');
+            
+            try {
+                // Token'i API'den al
+                const API_URL = "https://core-api.kablowebtv.com/api/channels";
+                const HEADERS = {
+                    "User-Agent": "Mozilla/5.0",
+                    "Referer": "https://tvheryerde.com",
+                    "Origin": "https://tvheryerde.com",
+                    "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbnYiOiJMSVZFIiwiaXBiIjoiMCIsImNnZCI6IjA5M2Q3MjBhLTUwMmMtNDFlZC1hODBmLTJiODE2OTg0ZmI5NSIsImNzaCI6IlRSS1NUIiwiZGN0IjoiRTFDNjQiLCJkaSI6Ijg5MTlmNjYwLTBhZGUtNGYwMS1hMTVlLTc2MDZjNjI8ZTc5MyIsInNnZCI6IjM5MTY0ZjIwLTZlZjUtNDRlZS04ZjAyLWEzODRjOTg1ZTY5MyIsInNwZ2QiOiI5ZjJlYWE1NC01NDM2LTQ0ZTgtYTkyNy00MzQ2NjlkMTU1MWEiLCJpY2giOiIwIiwiaWRtIjoiMCIsImlhIjoiOjpmZmZmOjEwLjAuMC41IiwiYXB2IjoiMS4wLjAiLCJhYm4iOiIxMDAwIiwibmJmIjoxNzQzNDY1MzY5LCJleHAiOjE3NDM0NjU0MjksImlhdCI6MTc0MzQ2NTM2OX0.YWdVfOL5hEZTrd4f4qkmPCPmUUlaiG7I2REW5H0p6Gw"
+                };
+
+                const res = await fetch(API_URL, { headers: HEADERS, method: 'GET' });
+                if (!res.ok) throw new Error(`API hatası: ${res.status}`);
+                
+                const data = await res.json();
+                if (!data.IsSucceeded || !data.Data || !data.Data.AllChannels)
+                    throw new Error("Geçersiz API yanıtı");
+
+                const atvChannel = data.Data.AllChannels.find(ch => 
+                    ch && ch.StreamData && ch.StreamData.HlsStreamUrl && 
+                    ch.StreamData.HlsStreamUrl.includes('atv_stream')
+                );
+                
+                if (atvChannel && atvChannel.StreamData.HlsStreamUrl) {
+                    const url = atvChannel.StreamData.HlsStreamUrl;
+                    const prefix = "https://ottcdn.kablowebtv.net/live_turksat_sub3/atv_stream/index.m3u8?wmsAuthSign=";
+                    
+                    if (url.startsWith(prefix)) {
+                        const token = url.substring(prefix.length);
+                        
+                        // Token'i göster
+                        tokenValue.textContent = token;
+                        tokenResult.style.display = 'block';
+                        
+                        // Token'i localStorage'a kaydet (tarayıcıda)
+                        localStorage.setItem('lastToken', token);
+                        localStorage.setItem('lastTokenTime', new Date().getTime());
+                        
+                        // Token'i dosyaya yazmak için download oluştur
+                        createTokenDownload(token);
+                        
+                        statusDiv.className = 'status success';
+                        statusDiv.innerHTML = 'Token başarıyla alındı ve tarayıcıda saklandı!';
+                        
+                    } else {
+                        throw new Error("ATV URL'si beklenen formatta değil");
+                    }
+                } else {
+                    throw new Error("ATV kanalı veya stream URL bulunamadı");
+                }
+            } catch (error) {
+                // Hata durumunda önceki token'i göster
+                const lastToken = localStorage.getItem('lastToken');
+                if (lastToken) {
+                    tokenValue.textContent = lastToken;
+                    tokenResult.style.display = 'block';
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = 'Hata: ' + error.message + '<br>Önceki token gösteriliyor.';
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.innerHTML = 'Hata: ' + error.message;
+                }
+            }
+        });
+
+        function createTokenDownload(token) {
+            // Token'i indirilebilir bir dosya olarak oluştur
+            const blob = new Blob([token], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            
+            // Dosya adını ve konumunu ayarla
+            a.href = url;
+            a.download = 'token.txt';
+            
+            // Otomatik olarak tıklama simüle et (dosyayı indir)
+            document.body.appendChild(a);
+            a.click();
+            
+            // Temizlik
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        // Sayfa her görüntülendiğinde veya yenilendiğinde token'i güncelle
+        window.onload = function() {
+            // Sayfa yüklendiğinde token'i kontrol et ve güncelle
+            const lastTokenTime = localStorage.getItem('lastTokenTime');
+            const currentTime = new Date().getTime();
+            
+            // 5 dakikadan eski token'leri yenile
+            if (!lastTokenTime || (currentTime - lastTokenTime) > 5 * 60 * 1000) {
+                // Token'i yeniden al
+                document.getElementById('status').className = 'status loading';
+                document.getElementById('status').innerHTML = 'Token alınıyor ve dosyaya yazılıyor...';
+                document.getElementById('tokenResult').style.display = 'none';
+                
+                // Sayfayı yenile
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            }
+        };
+    </script>
+</body>
+</html>
