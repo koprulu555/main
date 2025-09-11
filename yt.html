@@ -19,43 +19,17 @@
             if (!videoId) return;
 
             try {
-                // 1. YouTube'dan cookies al
-                const cookieResponse = await fetch('https://corsproxy.io/?https://m.youtube.com', {
+                // 1. Direkt YouTube sayfasını al
+                const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}`, {
                     headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
-                });
-
-                // Cookie'leri parse et
-                const cookieHeader = cookieResponse.headers.get('set-cookie') || '';
-                let cookies = '';
-                
-                if (cookieHeader.includes('VISITOR_INFO1_LIVE=')) {
-                    const match = cookieHeader.match(/VISITOR_INFO1_LIVE=([^;]+)/);
-                    if (match) cookies += `VISITOR_INFO1_LIVE=${match[1]}; `;
-                }
-                if (cookieHeader.includes('VISITOR_PRIVACY_METADATA=')) {
-                    const match = cookieHeader.match(/VISITOR_PRIVACY_METADATA=([^;]+)/);
-                    if (match) cookies += `VISITOR_PRIVACY_METADATA=${match[1]}; `;
-                }
-                if (cookieHeader.includes('__Secure-ROLLOUT_TOKEN=')) {
-                    const match = cookieHeader.match(/__Secure-ROLLOUT_TOKEN=([^;]+)/);
-                    if (match) cookies += `__Secure-ROLLOUT_TOKEN=${match[1]}; `;
-                }
-
-                // 2. M3U8 URL'sini al
-                const response = await fetch(`https://corsproxy.io/?https://m.youtube.com/watch?v=${videoId}&app=TABLET`, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.58 Mobile Safari/537.36',
-                        'Cookie': cookies,
-                        'X-YouTube-Client-Name': '2',
-                        'X-YouTube-Client-Version': '2.20250523.01.00'
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
                     }
                 });
 
                 const text = await response.text();
                 
-                // hlsManifestUrl'yi ara
+                // 2. hlsManifestUrl'yi direkt ara
                 const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
                 const match = text.match(regex);
                 
