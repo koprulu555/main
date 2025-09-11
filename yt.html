@@ -1,101 +1,92 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="utf-8">
     <title>YouTube M3U8 Player</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #1a1a1a; color: white; }
-        .container { background: #2d2d2d; padding: 20px; border-radius: 10px; margin: 20px auto; max-width: 800px; }
-        input { padding: 10px; width: 300px; border: none; border-radius: 5px; margin-right: 10px; }
-        button { padding: 10px 20px; border: none; border-radius: 5px; background: #ff0000; color: white; cursor: pointer; }
-        .player { width: 100%; height: 400px; background: #000; margin-top: 20px; border-radius: 10px; }
-        .url-display { background: #333; padding: 15px; border-radius: 5px; margin-top: 15px; word-break: break-all; }
+        body { margin: 0; padding: 0; background: #000; }
+        video { width: 100vw; height: 100vh; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>YouTube M3U8 Player</h1>
-        
-        <div>
-            <input type="text" id="videoId" placeholder="Video ID (örn: MSlOWVOF84o)">
-            <button onclick="playFromInput()">Oynat</button>
-        </div>
-
-        <div class="player">
-            <video id="videoPlayer" controls width="100%" height="100%">
-                Tarayıcınız video oynatmayı desteklemiyor.
-            </video>
-        </div>
-        
-        <div id="urlDisplay" class="url-display"></div>
-    </div>
+    <video id="player" controls autoplay></video>
 
     <script>
-        // URL parametrelerini kontrol et
+        // URL parametrelerini al
         const urlParams = new URLSearchParams(window.location.search);
         const videoId = urlParams.get('video_id');
-        
-        if (videoId) {
-            document.getElementById('videoId').value = videoId;
-            playVideo(videoId);
-        }
+        const kanalId = urlParams.get('kanal_id');
 
-        async function playFromInput() {
-            const videoId = document.getElementById('videoId').value.trim();
-            if (videoId) {
-                // URL'yi güncelle
-                window.history.replaceState({}, '', `?video_id=${videoId}`);
-                playVideo(videoId);
-            }
-        }
-
-        async function playVideo(videoId) {
-            const videoPlayer = document.getElementById('videoPlayer');
-            const urlDisplay = document.getElementById('urlDisplay');
-            
-            videoPlayer.src = '';
-            urlDisplay.innerHTML = '🔄 M3U8 URL alınıyor...';
-            
-            try {
-                // Proxy üzerinden M3U8 al
-                const m3u8Url = await getM3U8Url(videoId);
-                
+        if (!videoId && !kanalId) {
+            document.body.innerHTML = '<h1 style="color:white;text-align:center;">HATA: video_id veya kanal_id parametresi gerekli</h1>';
+        } else {
+            // M3U8 URL'sini al ve oynat
+            getM3U8Url().then(m3u8Url => {
                 if (m3u8Url) {
-                    videoPlayer.src = m3u8Url;
-                    videoPlayer.load();
-                    urlDisplay.innerHTML = `✅ M3U8 URL: ${m3u8Url}`;
+                    document.getElementById('player').src = m3u8Url;
                 } else {
-                    urlDisplay.innerHTML = '❌ M3U8 URL bulunamadı';
-                }
-                
-            } catch (error) {
-                urlDisplay.innerHTML = `❌ Hata: ${error.message}`;
-            }
-        }
-
-        async function getM3U8Url(videoId) {
-            // Ücretsiz CORS proxy kullan
-            const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-            const targetUrl = `https://www.youtube.com/watch?v=${videoId}`;
-            
-            const response = await fetch(proxyUrl + targetUrl, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    document.body.innerHTML = '<h1 style="color:white;text-align:center;">M3U8 URL bulunamadı</h1>';
                 }
             });
+        }
+
+        async function getM3U8Url() {
+            const id = videoId || kanalId;
+            const isVideo = !!videoId;
             
-            const html = await response.text();
-            
-            // hlsManifestUrl'yi ara
-            const regex = /"hlsManifestUrl":"([^"]+)"/;
-            const match = html.match(regex);
-            
-            if (match && match[1]) {
-                return match[1].replace(/\\u0026/g, '&');
+            try {
+                // 1. Cookies al
+                const cookieResponse = await fetch('https://m.youtube.com/');
+                const cookieText = await cookieResponse.text();
+                
+                // Cookies parse et
+                let visitorInfo = '', visitorMetadata = '', rolloutToken = '';
+                const cookieHeader = cookieResponse.headers.get('set-cookie') || '';
+                
+                if (cookieHeader.includes('VISITOR_INFO1_LIVE=')) {
+                    visitorInfo = cookieHeader.split('VISITOR_INFO1_LIVE=')[1].split(';')[0];
+                }
+                if (cookieHeader.includes('VISITOR_PRIVACY_METADATA=')) {
+                    visitorMetadata = cookieHeader.split('VISITOR_PRIVACY_METADATA=')[1].split(';')[0];
+                }
+                if (cookieHeader.includes('__Secure-ROLLOUT_TOKEN=')) {
+                    rolloutToken = cookieHeader.split('__Secure-ROLLOUT_TOKEN=')[1].split(';')[0];
+                }
+
+                // 2. M3U8 URL'sini al
+                let apiUrl;
+                if (isVideo) {
+                    apiUrl = `https://m.youtube.com/watch?v=${id}&app=TABLET`;
+                } else {
+                    apiUrl = `https://m.youtube.com/channel/${id}/live?app=TABLET`;
+                }
+
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        'Cookie': `VISITOR_INFO1_LIVE=${visitorInfo}; VISITOR_PRIVACY_METADATA=${visitorMetadata}; __Secure-ROLLOUT_TOKEN=${rolloutToken}`,
+                        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.58 Mobile Safari/537.36',
+                        'X-YouTube-Client-Name': '2',
+                        'X-YouTube-Client-Version': '2.20250523.01.00'
+                    }
+                });
+
+                const text = await response.text();
+                const cleanText = text.replace(/\\/g, '');
+                
+                // hlsManifestUrl'yi ara
+                const regex = /"hlsManifestUrl":"([^"]+)"/;
+                const match = cleanText.match(regex);
+                
+                if (match && match[1]) {
+                    return match[1].replace(/\\u0026/g, '&');
+                }
+                
+                return null;
+
+            } catch (error) {
+                console.error('Hata:', error);
+                return null;
             }
-            
-            return null;
         }
     </script>
 </body>
