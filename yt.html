@@ -20,37 +20,36 @@
         if (!videoId && !kanalId) {
             document.body.innerHTML = '<h1 style="color:white;text-align:center;">HATA: video_id veya kanal_id parametresi gerekli</h1>';
         } else {
-            // M3U8 URL'sini al ve oynat
-            getM3U8Url().then(m3u8Url => {
-                if (m3u8Url) {
-                    document.getElementById('player').src = m3u8Url;
-                } else {
-                    document.body.innerHTML = '<h1 style="color:white;text-align:center;">M3U8 URL bulunamadı</h1>';
-                }
-            });
+            playVideo();
         }
 
-        async function getM3U8Url() {
+        async function playVideo() {
             const id = videoId || kanalId;
             const isVideo = !!videoId;
             
             try {
-                // 1. Cookies al
-                const cookieResponse = await fetch('https://m.youtube.com/');
-                const cookieText = await cookieResponse.text();
-                
-                // Cookies parse et
-                let visitorInfo = '', visitorMetadata = '', rolloutToken = '';
+                // 1. Önce YouTube'dan cookies al
+                const cookieResponse = await fetch('https://m.youtube.com/', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.58 Mobile Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+                    }
+                });
+
+                // Cookie'leri parse et
                 const cookieHeader = cookieResponse.headers.get('set-cookie') || '';
-                
-                if (cookieHeader.includes('VISITOR_INFO1_LIVE=')) {
-                    visitorInfo = cookieHeader.split('VISITOR_INFO1_LIVE=')[1].split(';')[0];
-                }
-                if (cookieHeader.includes('VISITOR_PRIVACY_METADATA=')) {
-                    visitorMetadata = cookieHeader.split('VISITOR_PRIVACY_METADATA=')[1].split(';')[0];
-                }
-                if (cookieHeader.includes('__Secure-ROLLOUT_TOKEN=')) {
-                    rolloutToken = cookieHeader.split('__Secure-ROLLOUT_TOKEN=')[1].split(';')[0];
+                let visitorInfo = '', visitorMetadata = '', rolloutToken = '';
+
+                const cookieLines = cookieHeader.split(',');
+                for (const cookie of cookieLines) {
+                    if (cookie.includes('VISITOR_INFO1_LIVE=')) {
+                        visitorInfo = cookie.split('VISITOR_INFO1_LIVE=')[1].split(';')[0];
+                    } else if (cookie.includes('VISITOR_PRIVACY_METADATA=')) {
+                        visitorMetadata = cookie.split('VISITOR_PRIVACY_METADATA=')[1].split(';')[0];
+                    } else if (cookie.includes('__Secure-ROLLOUT_TOKEN=')) {
+                        rolloutToken = cookie.split('__Secure-ROLLOUT_TOKEN=')[1].split(';')[0];
+                    }
                 }
 
                 // 2. M3U8 URL'sini al
@@ -65,27 +64,50 @@
                     headers: {
                         'Cookie': `VISITOR_INFO1_LIVE=${visitorInfo}; VISITOR_PRIVACY_METADATA=${visitorMetadata}; __Secure-ROLLOUT_TOKEN=${rolloutToken}`,
                         'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.6723.58 Mobile Safari/537.36',
+                        'Accept': '*/*',
+                        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
                         'X-YouTube-Client-Name': '2',
-                        'X-YouTube-Client-Version': '2.20250523.01.00'
+                        'X-YouTube-Client-Version': '2.20250523.01.00',
+                        'X-YouTube-Device': 'cbr=Chrome+Mobile+Webview&cbrand=generic&cbrver=130.0.6723.58&ceng=WebKit&cengver=537.36&cmodel=android+14.0&cos=Android&cosver=14&cplatform=TABLET'
                     }
                 });
 
                 const text = await response.text();
-                const cleanText = text.replace(/\\/g, '');
                 
-                // hlsManifestUrl'yi ara
-                const regex = /"hlsManifestUrl":"([^"]+)"/;
-                const match = cleanText.match(regex);
+                // HTML içinde hlsManifestUrl'yi ara
+                const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
+                const match = text.match(regex);
                 
                 if (match && match[1]) {
-                    return match[1].replace(/\\u0026/g, '&');
+                    const m3u8Url = match[1].replace(/\\u0026/g, '&');
+                    console.log('M3U8 URL bulundu:', m3u8Url);
+                    
+                    // Videoyu oynat
+                    document.getElementById('player').src = m3u8Url;
+                } else {
+                    // Alternatif arama
+                    const altRegex = /(https:\/\/manifest\.googlevideo\.com[^"]+\.m3u8)/;
+                    const altMatch = text.match(altRegex);
+                    
+                    if (altMatch && altMatch[1]) {
+                        const m3u8Url = altMatch[1].replace(/\\u0026/g, '&');
+                        console.log('Alternatif M3U8 URL bulundu:', m3u8Url);
+                        document.getElementById('player').src = m3u8Url;
+                    } else {
+                        throw new Error('M3U8 URL bulunamadı. Response: ' + text.substring(0, 500));
+                    }
                 }
-                
-                return null;
 
             } catch (error) {
                 console.error('Hata:', error);
-                return null;
+                document.body.innerHTML = `
+                    <h1 style="color:white;text-align:center;">
+                        HATA: ${error.message}
+                    </h1>
+                    <p style="color:white;text-align:center;">
+                        Console'da detayları görüntüleyin
+                    </p>
+                `;
             }
         }
     </script>
