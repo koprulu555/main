@@ -28,61 +28,20 @@
             const isVideo = !!videoId;
             
             try {
-                // Proxy ile YouTube sayfasını al
-                let youtubeUrl;
-                if (isVideo) {
-                    youtubeUrl = `https://www.youtube.com/watch?v=${id}`;
+                // 1. Önce doğrudan M3U8 URL'sini oluşturmayı dene
+                let m3u8Url = await getM3U8UrlDirect(id, isVideo);
+                
+                if (!m3u8Url) {
+                    // 2. Proxy ile YouTube sayfasından çek
+                    m3u8Url = await getM3U8UrlViaProxy(id, isVideo);
+                }
+
+                if (m3u8Url) {
+                    console.log('M3U8 URL:', m3u8Url);
+                    document.getElementById('player').src = m3u8Url;
                 } else {
-                    youtubeUrl = `https://www.youtube.com/channel/${id}/live`;
+                    throw new Error('M3U8 URL bulunamadı');
                 }
-
-                const proxyUrl = `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(youtubeUrl)}`;
-                
-                console.log('Proxy URL:', proxyUrl);
-                
-                const response = await fetch(proxyUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const html = await response.text();
-                
-                console.log('HTML alındı, uzunluk:', html.length);
-                
-                // hlsManifestUrl'yi ara
-                const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
-                const match = html.match(regex);
-                
-                if (match && match[1]) {
-                    const m3u8Url = match[1].replace(/\\u0026/g, '&');
-                    console.log('M3U8 URL bulundu:', m3u8Url);
-                    
-                    // Videoyu oynat
-                    document.getElementById('player').src = m3u8Url;
-                    return;
-                }
-
-                // Alternatif arama
-                const altRegex = /(https:\/\/manifest\.googlevideo\.com[^"]+\.m3u8)/;
-                const altMatch = html.match(altRegex);
-                
-                if (altMatch && altMatch[1]) {
-                    const m3u8Url = altMatch[1].replace(/\\u0026/g, '&');
-                    console.log('Alternatif M3U8 URL bulundu:', m3u8Url);
-                    document.getElementById('player').src = m3u8Url;
-                    return;
-                }
-
-                // Son çare: embed sayfasını dene
-                console.log('Ana sayfada bulunamadı, embed sayfası deneniyor...');
-                await tryEmbedPage(id);
 
             } catch (error) {
                 console.error('Hata:', error);
@@ -94,34 +53,99 @@
             }
         }
 
-        async function tryEmbedPage(videoId) {
+        async function getM3U8UrlDirect(videoId, isVideo) {
             try {
-                const embedUrl = `https://www.youtube.com/embed/${videoId}`;
-                const proxyUrl = `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(embedUrl)}`;
-                
-                const response = await fetch(proxyUrl, {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                    }
-                });
-
-                const html = await response.text();
-                
-                const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
-                const match = html.match(regex);
-                
-                if (match && match[1]) {
-                    const m3u8Url = match[1].replace(/\\u0026/g, '&');
-                    console.log('Embed sayfasında M3U8 URL bulundu:', m3u8Url);
-                    document.getElementById('player').src = m3u8Url;
+                // YouTube'un doğrudan M3U8 URL formatı
+                if (isVideo) {
+                    return `https://www.youtube.com/api/manifest/hls_variant/id/${videoId}/source/youtube`;
                 } else {
-                    throw new Error('M3U8 URL hiçbir sayfada bulunamadı');
+                    // Kanal için önce video ID bulmamız gerekebilir
+                    const channelUrl = `https://www.youtube.com/channel/${videoId}/live`;
+                    const proxyUrl = `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(channelUrl)}`;
+                    
+                    const response = await fetch(proxyUrl);
+                    const html = await response.text();
+                    
+                    // Video ID'yi bul
+                    const videoIdMatch = html.match(/"videoId":"([^"]+)"/);
+                    if (videoIdMatch) {
+                        return `https://www.youtube.com/api/manifest/hls_variant/id/${videoIdMatch[1]}/source/youtube`;
+                    }
+                }
+            } catch (error) {
+                console.log('Direct method failed:', error);
+                return null;
+            }
+            return null;
+        }
+
+        async function getM3U8UrlViaProxy(id, isVideo) {
+            try {
+                let youtubeUrl;
+                if (isVideo) {
+                    youtubeUrl = `https://www.youtube.com/watch?v=${id}`;
+                } else {
+                    youtubeUrl = `https://www.youtube.com/channel/${id}/live`;
                 }
 
+                // Farklı proxy servisleri deneyelim
+                const proxies = [
+                    'https://api.codetabs.com/v1/proxy/?quest=',
+                    'https://corsproxy.io/?',
+                    'https://proxy.cors.sh/'
+                ];
+
+                for (const proxy of proxies) {
+                    try {
+                        const proxyUrl = proxy + encodeURIComponent(youtubeUrl);
+                        console.log('Trying proxy:', proxy);
+                        
+                        const response = await fetch(proxyUrl, {
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                                'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                                'Origin': 'https://www.youtube.com',
+                                'Referer': 'https://www.youtube.com/'
+                            }
+                        });
+
+                        const html = await response.text();
+                        
+                        // hlsManifestUrl'yi ara
+                        const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
+                        const match = html.match(regex);
+                        
+                        if (match && match[1]) {
+                            return match[1].replace(/\\u0026/g, '&');
+                        }
+
+                        // Alternatif pattern
+                        const altRegex = /(https:\/\/manifest\.googlevideo\.com[^"]+\.m3u8)/;
+                        const altMatch = html.match(altRegex);
+                        
+                        if (altMatch && altMatch[1]) {
+                            return altMatch[1].replace(/\\u0026/g, '&');
+                        }
+
+                    } catch (proxyError) {
+                        console.log('Proxy failed:', proxy, proxyError);
+                        continue;
+                    }
+                }
+
+                return null;
+
             } catch (error) {
-                console.error('Embed hatası:', error);
-                throw error;
+                console.error('Proxy method error:', error);
+                return null;
             }
+        }
+
+        // Fallback: Manuel M3U8 URL oluştur
+        function createManualM3U8Url(videoId) {
+            const timestamp = Math.floor(Date.now() / 1000) + 3600; // 1 saat geçerli
+            return `https://manifest.googlevideo.com/api/manifest/hls_variant/expire/${timestamp}/ei/random_string/id/${videoId}/source/youtube/requiressl/yes/ratebypass/yes/live/1`;
         }
     </script>
 </body>
