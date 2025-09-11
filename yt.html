@@ -2,66 +2,123 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>YouTube M3U8 Player - Alternative</title>
-    <style>body { margin: 0; padding: 20px; background: #000; color: white; }</style>
+    <title>YouTube HLS Player</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #000; color: white; font-family: Arial; }
+        video { width: 100%; height: 70vh; margin-top: 20px; border: 2px solid #333; }
+        .input-group { margin: 20px 0; }
+        input { padding: 10px; width: 300px; border: none; border-radius: 5px; }
+        button { padding: 10px 20px; border: none; border-radius: 5px; background: #ff0000; color: white; cursor: pointer; }
+        .status { margin: 10px 0; color: #ffa500; }
+    </style>
 </head>
 <body>
-    <h1>Alternatif Proxy Denemesi</h1>
-    <div id="status">Test ediliyor...</div>
-    <div id="result"></div>
+    <h1>YouTube HLS Player</h1>
+    
+    <div class="input-group">
+        <input type="text" id="videoId" placeholder="Video ID (örn: MSlOWVOF84o)">
+        <button onclick="playVideo()">Oynat</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    
+    <video id="player" controls></video>
 
     <script>
-        const urlParams = new URLSearchParams(window.location.search);
-        const videoId = urlParams.get('video_id') || 'MSlOWVOF84o'; // Test için
-
-        const proxies = [
-            'https://api.codetabs.com/v1/proxy/?quest=',
-            'https://corsproxy.io/?',
-            'https://proxy.cors.sh/',
-            'https://cors-anywhere.herokuapp.com/',
-            'https://crossorigin.me/'
-        ];
-
-        async function testProxies() {
-            const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        async function playVideo() {
+            const videoId = document.getElementById('videoId').value.trim();
+            const statusDiv = document.getElementById('status');
+            const player = document.getElementById('player');
             
-            for (const [index, proxy] of proxies.entries()) {
-                try {
-                    document.getElementById('status').textContent = `Testing proxy ${index + 1}/${proxies.length}: ${proxy}`;
+            if (!videoId) {
+                statusDiv.textContent = 'Lütfen Video ID girin!';
+                return;
+            }
+
+            statusDiv.textContent = 'M3U8 aranıyor...';
+            player.src = '';
+
+            try {
+                // 1. YouTube watch sayfasını al
+                const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(watchUrl)}`;
+                
+                const response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                    }
+                });
+                
+                const html = await response.text();
+                
+                // 2. hlsManifestUrl'yi ara
+                const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
+                const match = html.match(regex);
+                
+                if (match && match[1]) {
+                    const m3u8Url = match[1].replace(/\\u0026/g, '&');
+                    statusDiv.textContent = 'M3U8 bulundu! Oynatılıyor...';
                     
-                    const proxyUrl = proxy + encodeURIComponent(youtubeUrl);
-                    const response = await fetch(proxyUrl, { 
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                    // 3. Videoyu oynat
+                    player.src = m3u8Url;
+                    player.load();
+                    player.play().catch(e => {
+                        statusDiv.textContent = 'Otomatik oynatma engellendi. Lütfen manuel play butonuna basın.';
                     });
                     
-                    const html = await response.text();
-                    const hasM3U8 = html.includes('hlsManifestUrl');
-                    
-                    const resultDiv = document.getElementById('result');
-                    resultDiv.innerHTML += `
-                        <div style="margin: 10px; padding: 10px; border: 1px solid ${hasM3U8 ? 'green' : 'red'};">
-                            <strong>${proxy}</strong>: ${hasM3U8 ? '✅ M3U8 Bulundu' : '❌ M3U8 Yok'}
-                            ${hasM3U8 ? `<br><button onclick="playWithProxy('${proxy}')">Oynat</button>` : ''}
-                        </div>
-                    `;
-                    
-                } catch (error) {
-                    document.getElementById('result').innerHTML += `
-                        <div style="margin: 10px; padding: 10px; border: 1px solid red;">
-                            <strong>${proxy}</strong>: ❌ Hata: ${error.message}
-                        </div>
-                    `;
+                } else {
+                    statusDiv.textContent = 'M3U8 bulunamadı. Embed sayfası deneniyor...';
+                    await tryEmbedPage(videoId);
                 }
+
+            } catch (error) {
+                statusDiv.textContent = `Hata: ${error.message}`;
+                console.error('Hata detayı:', error);
             }
+        }
+
+        async function tryEmbedPage(videoId) {
+            const statusDiv = document.getElementById('status');
+            const player = document.getElementById('player');
             
-            document.getElementById('status').textContent = 'Test tamamlandı';
+            try {
+                // Embed sayfasını dene
+                const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(embedUrl)}`;
+                
+                const response = await fetch(proxyUrl, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                
+                const html = await response.text();
+                const regex = /"hlsManifestUrl":"(https:\/\/[^"]+\.m3u8[^"]*)"/;
+                const match = html.match(regex);
+                
+                if (match && match[1]) {
+                    const m3u8Url = match[1].replace(/\\u0026/g, '&');
+                    statusDiv.textContent = 'Embed sayfasında M3U8 bulundu!';
+                    player.src = m3u8Url;
+                    player.load();
+                } else {
+                    statusDiv.textContent = 'M3U8 hiçbir sayfada bulunamadı';
+                }
+
+            } catch (error) {
+                statusDiv.textContent = `Embed hatası: ${error.message}`;
+            }
         }
 
-        function playWithProxy(proxy) {
-            window.location.href = `index.html?video_id=${videoId}&proxy=${encodeURIComponent(proxy)}`;
+        // URL parametrelerini kontrol et
+        const urlParams = new URLSearchParams(window.location.search);
+        const videoIdParam = urlParams.get('video_id');
+        
+        if (videoIdParam) {
+            document.getElementById('videoId').value = videoIdParam;
+            setTimeout(() => playVideo(), 1000);
         }
-
-        testProxies();
     </script>
 </body>
 </html>
